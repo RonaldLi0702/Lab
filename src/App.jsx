@@ -21,7 +21,7 @@ const DEFAULT_RULES = {
 };
 
 // 布局常量
-const GRID_HEIGHT = 1440; 
+const GRID_HEIGHT = 1440; // 24小时 * 60px/小时
 const HEADER_HEIGHT_STYLE = { height: '50px' }; 
 
 // 工具函数
@@ -35,12 +35,22 @@ const generateColor = (str) => {
 const formatDate = (d) => d.toISOString().split('T')[0];
 const addDays = (d, days) => { const r = new Date(d); r.setDate(r.getDate() + days); return r; };
 
+// 中文日期格式化
 const formatDateTimeCN = (dateStr, timeStr) => {
   if (!dateStr || !timeStr) return "";
   const d = new Date(dateStr);
   return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${timeStr}`;
 };
 
+// 0-24小时映射到像素位置
+const timeToPx = (timeStr) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (h === 24) return GRID_HEIGHT;
+  return (h * 60 + m) * (GRID_HEIGHT / 1440);
+};
+
+// 像素映射到时间 (分钟)
 const pxToTimeStr = (px) => {
   let totalMins = Math.floor((px / GRID_HEIGHT) * 1440);
   totalMins = Math.max(0, Math.min(1440, totalMins)); 
@@ -51,13 +61,6 @@ const pxToTimeStr = (px) => {
   let m = totalMins % 60;
   if (h === 24) return "24:00"; 
   return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
-};
-
-const timeToPx = (timeStr) => {
-  if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
-  if (h === 24) return GRID_HEIGHT;
-  return (h * 60 + m) * (GRID_HEIGHT / 1440);
 };
 
 export default function App() {
@@ -96,12 +99,14 @@ export default function App() {
 
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
   const [filterConfig, setFilterConfig] = useState({ status: 'all', equipmentId: 'all' });
+  const [selectedResIds, setSelectedResIds] = useState([]);
 
   const fileInputRef = useRef(null);
   const timelineRef = useRef(null);
 
   useEffect(() => { refreshData(); }, [userRole]);
 
+  // --- 数据加载 ---
   const refreshData = async () => {
     setLoading(true);
     try {
@@ -135,6 +140,7 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // --- 关键函数：保存规则 ---
   const saveRules = async () => {
     setLoading(true);
     try {
@@ -160,6 +166,7 @@ export default function App() {
     setLoading(false);
   };
 
+  // --- 拖拽交互 ---
   const handlePointerDown = (dayIndex, e) => {
     if (currentUser?.isBlocked) return showToast("账号被封禁", "error");
     if (!e.target.classList.contains('timeline-bg')) return; 
@@ -168,6 +175,7 @@ export default function App() {
     const relativeY = e.clientY - rect.top;
     setDragState({ isDragging: true, dayIndex, startY: relativeY, currentY: relativeY });
   };
+
   const handlePointerMove = (e) => {
     if (!dragState.isDragging) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -175,26 +183,50 @@ export default function App() {
     relativeY = Math.max(0, Math.min(GRID_HEIGHT, relativeY)); 
     setDragState(prev => ({ ...prev, currentY: relativeY }));
   };
+
   const handlePointerUp = (e) => {
     if (!dragState.isDragging) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
+    
     const startY = dragState.startY;
     const endY = dragState.currentY;
+
     let startMin = Math.floor((Math.min(startY, endY) / GRID_HEIGHT) * 1440);
     let endMin = Math.floor((Math.max(startY, endY) / GRID_HEIGHT) * 1440);
-    startMin = Math.round(startMin / 15) * 15; endMin = Math.round(endMin / 15) * 15;
-    if (endMin - startMin < 30) endMin = startMin + 30; if (endMin > 1440) endMin = 1440;
+
+    // 吸附
+    startMin = Math.round(startMin / 15) * 15;
+    endMin = Math.round(endMin / 15) * 15;
+
+    if (endMin - startMin < 30) endMin = startMin + 30;
+    if (endMin > 1440) endMin = 1440;
+
     const dateStr = formatDate(addDays(weekStart, dragState.dayIndex));
-    const formatTime = (m) => { if(m===1440) return "24:00"; const hh = Math.floor(m/60).toString().padStart(2,'0'); const mm = (m%60).toString().padStart(2,'0'); return `${hh}:${mm}`; };
-    setBookingForm({ id: null, startDate: dateStr, startTime: formatTime(startMin), endDate: dateStr, endTime: formatTime(endMin), note: "" });
+    
+    const formatTime = (m) => {
+        if(m===1440) return "24:00"; 
+        const hh = Math.floor(m/60).toString().padStart(2,'0');
+        const mm = (m%60).toString().padStart(2,'0');
+        return `${hh}:${mm}`;
+    };
+
+    setBookingForm({
+        id: null,
+        startDate: dateStr,
+        startTime: formatTime(startMin),
+        endDate: dateStr,
+        endTime: formatTime(endMin),
+        note: ""
+    });
     setModals(prev => ({ ...prev, booking: true }));
     setDragState({ isDragging: false, dayIndex: null, startY: 0, currentY: 0 });
   };
 
+  // --- 提交预约 ---
   const submitBooking = async () => {
     if (currentUser?.isBlocked) return showToast("账号被封禁", "error");
     const { id, startDate, startTime, endDate, endTime, note } = bookingForm;
-    if (!startDate || !startTime || !endDate || !endTime) return showToast("请完整填写", "error");
+    if (!startDate || !startTime || !endDate || !endTime) return showToast("请完整填写时间", "error");
 
     const startT = new Date(`${startDate}T${startTime === '24:00' ? '23:59:59' : startTime}`); 
     let endT = new Date(`${endDate}T${endTime === '24:00' ? '23:59:59' : endTime}`);
@@ -206,6 +238,7 @@ export default function App() {
 
     if (endT <= startT) return showToast("结束时间必须晚于开始时间", "error");
     if (!id && startT < now) return showToast("不能预约过去的时间", "error");
+
     if (startT > maxDate) return showToast(`只能提前 ${globalRules.maxAdvanceDays} 天预约`, "error");
 
     let limit = currentUser?.bookingLimit || globalRules.maxDuration;
@@ -245,6 +278,7 @@ export default function App() {
     setLoading(false);
   };
 
+  // --- 通用处理 ---
   const handleLogin = async () => {
     setLoading(true);
     if (loginForm.username === 'admin' && loginForm.password === adminPassword) {
@@ -285,23 +319,30 @@ export default function App() {
       refreshData(); setModals({...modals, eq:false}); setLoading(false); showToast("设备已保存");
   };
 
-  const handleDeleteEquipment = async (id) => { if(!confirm("确定删除?"))return; setLoading(true); try { await supabase.from('Equipment').delete().eq('id', id); refreshData(); showToast("已删除"); } catch(e) { showToast("失败","error"); } setLoading(false); };
+  const handleDeleteEquipment = async (id) => {
+      if(!confirm("确定删除该设备？")) return;
+      setLoading(true);
+      try {
+          await supabase.from('Equipment').delete().eq('id', id);
+          refreshData();
+          showToast("设备已删除");
+      } catch(e) { showToast("删除失败", "error"); }
+      setLoading(false);
+  };
+
   const handlePromote = async (u) => { await supabase.from('AppUser').update({ role: u.role==='admin'?'student':'admin' }).eq('id', u.id); refreshData(); showToast("权限变更"); };
   const handleLimitSave = async () => { await supabase.from('AppUser').update({ bookingLimit: limitForm.hours?parseFloat(limitForm.hours):null }).eq('id', limitForm.userId); refreshData(); setModals({...modals,limit:false}); showToast("限制已保存"); };
-  
   const handleCancelBooking = async (res) => { 
       const deadline = new Date(new Date(`${res.date}T${res.startTime}`).getTime() - globalRules.minCancelHours * 36e5);
       if (new Date() > deadline && userRole !== 'admin') return showToast(`距离开始不足 ${globalRules.minCancelHours} 小时，无法操作`, "error");
       if(!confirm("取消预约?")) return; 
       await supabase.from('Reservations').delete().eq('id', res.id); refreshData(); showToast("已取消"); 
   };
-  
   const handleEditBooking = (res) => { 
       const deadline = new Date(new Date(`${res.date}T${res.startTime}`).getTime() - globalRules.minCancelHours * 36e5);
       if (new Date() > deadline && userRole !== 'admin') return showToast(`距离开始不足 ${globalRules.minCancelHours} 小时，无法修改`, "error");
       setBookingForm({ id:res.id, startDate:res.date, startTime:res.startTime, endDate:res.endDate||res.date, endTime:res.endTime, note:res.note||"" }); setModals(p => ({...p, booking: true})); 
   };
-  
   const handleChangePassword = async () => { 
       const { oldPass, newPass, confirmPass } = pwdForm;
       if (!oldPass || !newPass || !confirmPass) return showToast("请填写完整", "error");
@@ -319,9 +360,12 @@ export default function App() {
       }
       showToast("密码修改成功"); setModals({...modals, pwd:false}); setLoading(false);
   };
-  const handleAdminAddUser = async () => { setLoading(true); await supabase.from('AppUser').insert([{ username: newUserForm.username, password: newUserForm.password, role: 'student', isBlocked: false }]); refreshData(); setModals({...modals, user:false}); setLoading(false); showToast("用户添加成功"); };
+  const handleAdminAddUser = async () => {
+    setLoading(true); await supabase.from('AppUser').insert([{ username: newUserForm.username, password: newUserForm.password, role: 'student', isBlocked: false }]);
+    refreshData(); setModals({...modals, user:false}); setLoading(false); showToast("用户添加成功");
+  };
   const handleRename = async () => {
-     if(!renameForm.trim()) return showToast("不能为空", "error");
+     if(!renameForm.trim()) return showToast("用户名不能为空", "error");
      setLoading(true);
      try {
         const { data } = await supabase.from('AppUser').select('*').eq('username', renameForm).neq('id', currentUser.id);
@@ -333,9 +377,27 @@ export default function App() {
         setCurrentUser(p => ({...p, username: renameForm})); setModals(p => ({...p, rename: false})); await refreshData(); showToast("修改成功");
      } catch(e) { showToast(e.message, "error"); } setLoading(false);
   };
-  const handleDeleteUser = async (id) => { if (!confirm("警告：删除用户将连带删除其所有数据，确定吗？")) return; try { await supabase.from('AppUser').delete().eq('id', id); await refreshData(); showToast("已删除"); } catch(e) { showToast("失败", "error"); } };
+  const handleDeleteUser = async (id) => { if (!confirm("警告：删除用户将连带删除其所有数据，确定吗？")) return; try { await supabase.from('AppUser').delete().eq('id', id); await refreshData(); showToast("用户已删除"); } catch(e) { showToast("失败", "error"); } };
   const handleToggleBlock = async (user) => { try { await supabase.from('AppUser').update({ isBlocked: !user.isBlocked }).eq('id', user.id); await refreshData(); showToast(!user.isBlocked ? "已封禁" : "已解封"); } catch (e) { showToast("操作失败", "error"); } };
   
+  // --- 批量删除 ---
+  const handleBatchDelete = async () => {
+      if (selectedResIds.length === 0) return;
+      if (!confirm(`确定删除选中的 ${selectedResIds.length} 条预约？`)) return;
+      setLoading(true);
+      try {
+          // Supabase v2 支持 .in()
+          await supabase.from('Reservations').delete().in('id', selectedResIds);
+          await refreshData();
+          setSelectedResIds([]);
+          showToast("批量删除成功");
+      } catch (e) { showToast("删除失败", "error"); }
+      setLoading(false);
+  };
+  const toggleSelectRes = (id) => {
+      setSelectedResIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
   const getFilteredReservations = (publicView) => {
     let data = [...reservations];
     if (publicView && userRole !== 'admin') {
@@ -347,6 +409,7 @@ export default function App() {
     return data.sort((a, b) => new Date(`${b.date}T${b.startTime}`) - new Date(`${a.date}T${a.startTime}`));
   };
 
+  // --- Render Week Cell ---
   const renderWeekCell = (dayIndex) => {
       const currentDate = addDays(weekStart, dayIndex);
       const cellStart = new Date(currentDate); cellStart.setHours(0,0,0,0);
@@ -392,6 +455,7 @@ export default function App() {
       );
   };
 
+  // --- 导航配置 ---
   const getNavItems = (role) => {
     const items = [
       { id: 'dashboard', label: '设备大厅', icon: LayoutGrid },
@@ -409,7 +473,9 @@ export default function App() {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md animate-in zoom-in-95">
         <h1 className="text-2xl font-bold text-center text-slate-800 mb-6 flex justify-center items-center gap-2"><Beaker className="text-blue-600"/> 实验室预约系统</h1>
         <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
-           {['login','register'].map(m => <button key={m} onClick={()=>setAuthMode(m)} className={`flex-1 py-2 text-sm rounded ${authMode===m?'bg-white shadow text-blue-600':'text-slate-500'}`}>{m==='login'?'登录':'注册'}</button>)}
+           {['login','register'].map(m => (
+             <button key={m} onClick={()=>setAuthMode(m)} className={`flex-1 py-2 text-sm rounded ${authMode===m?'bg-white shadow text-blue-600':'text-slate-500'}`}>{m==='login'?'登录':'注册'}</button>
+           ))}
         </div>
         <div className="space-y-4">
            <input className="w-full p-3 border rounded" placeholder="用户名 (支持中文)" value={authMode==='login'?loginForm.username:regForm.username} onChange={e=>authMode==='login'?setLoginForm({...loginForm,username:e.target.value}):setRegForm({...regForm,username:e.target.value})}/>
@@ -452,6 +518,7 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 py-4 md:py-6">
         {loading && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow z-50 text-sm text-blue-600 flex items-center gap-2">处理中...</div>}
 
+        {/* 1. 设备大厅 */}
         {mainView === 'dashboard' && (
           <div className="space-y-4">
              <div className="flex justify-between items-center">
@@ -480,10 +547,21 @@ export default function App() {
           </div>
         )}
 
+        {/* 2. 预约公示 */}
         {mainView === 'public_schedule' && (
            <div className="space-y-4">
              <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
-                <h2 className="text-lg font-bold">预约公示</h2>
+                <div className="flex items-center gap-4">
+                    <h2 className="text-lg font-bold">预约公示</h2>
+                    {/* 批量操作工具栏 */}
+                    {userRole === 'admin' && selectedResIds.length > 0 && (
+                        <div className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded text-sm text-blue-700 animate-in fade-in">
+                            <span>已选 {selectedResIds.length} 项</span>
+                            <button onClick={handleBatchDelete} className="flex items-center gap-1 text-red-600 hover:text-red-700 font-bold ml-2"><Trash2 size={14}/> 批量删除</button>
+                            <button onClick={() => setSelectedResIds([])} className="text-slate-400 hover:text-slate-600 ml-2">取消</button>
+                        </div>
+                    )}
+                </div>
                 <div className="flex gap-2 text-sm">
                     <select className="border p-1.5 rounded" value={filterConfig.status} onChange={e=>setFilterConfig({...filterConfig, status:e.target.value})}>
                        <option value="all">所有状态</option><option value="approved">已通过</option><option value="pending">待审核</option>
@@ -497,14 +575,20 @@ export default function App() {
                <table className="w-full text-sm text-left">
                  <thead className="bg-slate-50 text-slate-500 border-b">
                    <tr>
-                     {['equipmentName:设备','user:申请人','date:时间'].map(col=><th key={col} className="p-3 cursor-pointer" onClick={()=>setSortConfig({key:col.split(':')[0],direction:sortConfig.direction==='asc'?'desc':'asc'})}>{col.split(':')[1]} <ArrowUpDown size={12} className="inline"/></th>)}
+                     {userRole === 'admin' && <th className="p-3 w-10"><button onClick={() => setSelectedResIds(selectedResIds.length === getFilteredReservations(true).length ? [] : getFilteredReservations(true).map(r => r.id))}>{selectedResIds.length > 0 && selectedResIds.length === getFilteredReservations(true).length ? <CheckCircle size={16} className="text-blue-600"/> : <div className="w-4 h-4 border rounded border-slate-400"></div>}</button></th>}
+                     {['equipmentName:设备','user:申请人','date:时间'].map(col=>(
+                       <th key={col} className="p-3 cursor-pointer" onClick={()=>setSortConfig({key:col.split(':')[0],direction:sortConfig.direction==='asc'?'desc':'asc'})}>
+                         {col.split(':')[1]} <ArrowUpDown size={12} className="inline"/>
+                       </th>
+                     ))}
                      <th className="p-3">状态</th>
                      {userRole==='admin' && <th className="p-3 text-right">操作</th>}
                    </tr>
                  </thead>
                  <tbody className="divide-y">
                    {getFilteredReservations(true).map(res => (
-                     <tr key={res.id} className="hover:bg-slate-50">
+                     <tr key={res.id} className={`hover:bg-slate-50 ${selectedResIds.includes(res.id) ? 'bg-blue-50' : ''}`}>
+                       {userRole === 'admin' && <td className="p-3"><button onClick={() => toggleSelectRes(res.id)}>{selectedResIds.includes(res.id) ? <CheckCircle size={16} className="text-blue-600"/> : <div className="w-4 h-4 border rounded border-slate-400"></div>}</button></td>}
                        <td className="p-3">{res.equipmentName}</td>
                        <td className="p-3">{res.user}</td>
                        <td className="p-3">
@@ -513,7 +597,7 @@ export default function App() {
                          {res.note && <div className="text-xs text-slate-500 mt-1 truncate max-w-[150px]">📝 {res.note}</div>}
                        </td>
                        <td className="p-3"><span className={`px-2 py-0.5 rounded text-xs border ${res.status==='approved'?'bg-green-50 text-green-600 border-green-200':res.status==='pending'?'bg-amber-50 text-amber-600 border-amber-200':'bg-red-50 text-red-600 border-red-200'}`}>{res.status}</span></td>
-                       {userRole==='admin' && <td className="p-3 text-right"><button onClick={()=>supabase.from('Reservations').update({status:'approved'}).eq('id',res.id).then(refreshData)} className="text-green-600 mr-2"><CheckCircle size={18}/></button><button onClick={()=>supabase.from('Reservations').update({status:'rejected'}).eq('id',res.id).then(refreshData)} className="text-red-600"><XCircle size={18}/></button></td>}
+                       {userRole==='admin' && <td className="p-3 text-right"><div className="flex justify-end gap-2"><button onClick={()=>handleEditBooking(res)} className="text-blue-600 hover:bg-blue-50 p-1 rounded" title="修改"><Edit3 size={16}/></button><button onClick={()=>supabase.from('Reservations').update({status:'approved'}).eq('id',res.id).then(refreshData)} className="text-green-600 mr-2"><CheckCircle size={18}/></button><button onClick={()=>supabase.from('Reservations').update({status:'rejected'}).eq('id',res.id).then(refreshData)} className="text-red-600"><XCircle size={18}/></button></div></td>}
                      </tr>
                    ))}
                  </tbody>
@@ -522,6 +606,7 @@ export default function App() {
            </div>
         )}
 
+        {/* 3. 我的预约 */}
         {mainView === 'my_bookings' && (
            <div className="grid gap-4">
              {reservations.filter(r => r.user === currentUser?.username).map(res => (
@@ -536,6 +621,7 @@ export default function App() {
            </div>
         )}
 
+        {/* 4. 管理后台 */}
         {mainView === 'admin_panel' && userRole === 'admin' && (
            <div className="space-y-4">
               <div className="flex gap-2 border-b overflow-x-auto">
@@ -567,38 +653,7 @@ export default function App() {
                    </div>
                  </div>
               )}
-              {adminTab === 'rules' && (
-                 <div className="bg-white p-6 rounded-xl border max-w-lg space-y-4">
-                    <h3 className="font-bold border-b pb-2">全局规则配置</h3>
-                    <div className="grid grid-cols-1 gap-4">
-                        <div>
-                            <label className="text-sm font-medium text-slate-700 block mb-1">默认单次最大预约时长 (小时)</label>
-                            <input type="number" className="border p-2 w-full rounded" value={globalRules.maxDuration} onChange={e=>setGlobalRules({...globalRules,maxDuration:Number(e.target.value)})}/>
-                            <p className="text-xs text-slate-400 mt-1">超过此时间需管理员审核或拥有特殊权限。</p>
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-slate-700 block mb-1">最大提前预约天数</label>
-                            <input type="number" className="border p-2 w-full rounded" value={globalRules.maxAdvanceDays} onChange={e=>setGlobalRules({...globalRules,maxAdvanceDays:Number(e.target.value)})}/>
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-slate-700 block mb-1">修改/取消截止时间 (开始前 X 小时)</label>
-                            <input type="number" className="border p-2 w-full rounded" value={globalRules.minCancelHours} onChange={e=>setGlobalRules({...globalRules,minCancelHours:Number(e.target.value)})}/>
-                            <p className="text-xs text-slate-400 mt-1">距离预约开始时间小于此设定时，普通用户不可修改或取消。</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-6 pt-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" className="w-4 h-4" checked={globalRules.weekendOpen} onChange={e=>setGlobalRules({...globalRules,weekendOpen:e.target.checked})}/> 
-                            <span className="text-sm">周末开放预约</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" className="w-4 h-4" checked={globalRules.needAudit} onChange={e=>setGlobalRules({...globalRules,needAudit:e.target.checked})}/> 
-                            <span className="text-sm">开启人工审核</span>
-                        </label>
-                    </div>
-                    <button onClick={saveRules} className="btn-primary w-full py-2 rounded mt-2">保存全局规则</button>
-                 </div>
-              )}
+              {adminTab === 'rules' && <div className="bg-white p-4 rounded border"><h3 className="font-bold mb-4">规则设置</h3><div className="space-y-3"><div><label className="text-xs">最大时长(h)</label><input type="number" className="border w-full p-2 rounded" value={globalRules.maxDuration} onChange={e=>setGlobalRules({...globalRules,maxDuration:Number(e.target.value)})}/></div><div><label className="text-xs text-slate-500">最大提前天数</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxAdvanceDays} onChange={e=>setGlobalRules({...globalRules,maxAdvanceDays:Number(e.target.value)})}/></div><div><label className="text-xs text-slate-500">修改截至(h)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.minCancelHours} onChange={e=>setGlobalRules({...globalRules,minCancelHours:Number(e.target.value)})}/></div><div className="flex justify-between items-center"><span className="text-sm">周末开放</span><input type="checkbox" checked={globalRules.weekendOpen} onChange={e=>setGlobalRules({...globalRules,weekendOpen:e.target.checked})}/></div><div className="flex justify-between items-center"><span className="text-sm">人工审核</span><input type="checkbox" checked={globalRules.needAudit} onChange={e=>setGlobalRules({...globalRules,needAudit:e.target.checked})}/></div><button onClick={saveRules} className="w-full bg-blue-600 text-white py-2 rounded">保存</button></div></div>}
            </div>
         )}
       </main>
@@ -717,9 +772,6 @@ export default function App() {
       {modals.pwd && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-3"><h3 className="font-bold">修改密码</h3><input type="password" placeholder="旧密码" className="border w-full p-2 rounded" value={pwdForm.oldPass} onChange={e=>setPwdForm({...pwdForm,oldPass:e.target.value})}/><input type="password" placeholder="新密码" className="border w-full p-2 rounded" value={pwdForm.newPass} onChange={e=>setPwdForm({...pwdForm,newPass:e.target.value})}/><input type="password" placeholder="确认新密码" className="border w-full p-2 rounded" value={pwdForm.confirmPass} onChange={e=>setPwdForm({...pwdForm,confirmPass:e.target.value})}/><button onClick={handleChangePassword} className="btn-primary w-full py-2 rounded">确认</button><button onClick={()=>setModals({...modals,pwd:false})} className="w-full text-center text-xs mt-2">取消</button></div></div>}
       {modals.user && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-3"><h3 className="font-bold">添加用户</h3><input placeholder="用户名" className="border p-2 w-full rounded" value={newUserForm.username} onChange={e=>setNewUserForm({...newUserForm,username:e.target.value})}/><input placeholder="密码" className="border p-2 w-full rounded" value={newUserForm.password} onChange={e=>setNewUserForm({...newUserForm,password:e.target.value})}/><button onClick={handleAdminAddUser} className="btn-primary w-full py-2 rounded">添加</button><button onClick={()=>setModals({...modals,user:false})} className="w-full text-center text-xs mt-2">取消</button></div></div>}
       {modals.rename && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-4"><h3 className="font-bold">修改昵称</h3><input className="border w-full p-2 rounded" placeholder="新昵称" value={renameForm} onChange={e=>setRenameForm(e.target.value)}/><div className="flex gap-2"><button onClick={()=>setModals({...modals,rename:false})} className="flex-1 py-2 bg-slate-100 rounded">取消</button><button onClick={handleRename} className="flex-1 py-2 bg-blue-600 text-white rounded">确认</button></div></div></div>}
-      
-      {/* 规则设置弹窗 (Dashboard 快捷入口) */}
-      {modals.rule && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-full max-w-sm space-y-4"><h3 className="font-bold border-b pb-2">全局规则配置</h3><div className="grid grid-cols-1 gap-4"><div><label className="text-sm font-medium text-slate-700 block mb-1">默认单次最大预约时长 (小时)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxDuration} onChange={e=>setGlobalRules({...globalRules,maxDuration:Number(e.target.value)})}/><p className="text-xs text-slate-400 mt-1">超过此时间需管理员审核或拥有特殊权限。</p></div><div><label className="text-sm font-medium text-slate-700 block mb-1">最大提前预约天数</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxAdvanceDays} onChange={e=>setGlobalRules({...globalRules,maxAdvanceDays:Number(e.target.value)})}/></div><div><label className="text-sm font-medium text-slate-700 block mb-1">修改/取消截止时间 (开始前 X 小时)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.minCancelHours} onChange={e=>setGlobalRules({...globalRules,minCancelHours:Number(e.target.value)})}/><p className="text-xs text-slate-400 mt-1">距离预约开始时间小于此设定时，普通用户不可修改或取消。</p></div></div><div className="flex gap-6 pt-2"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={globalRules.weekendOpen} onChange={e=>setGlobalRules({...globalRules,weekendOpen:e.target.checked})}/> <span className="text-sm">周末开放预约</span></label><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={globalRules.needAudit} onChange={e=>setGlobalRules({...globalRules,needAudit:e.target.checked})}/> <span className="text-sm">开启人工审核</span></label></div><button onClick={saveRules} className="btn-primary w-full py-2 rounded mt-2">保存全局规则</button><button onClick={()=>setModals({...modals,rule:false})} className="text-xs text-center w-full mt-2 text-slate-500">关闭</button></div></div>}
 
       {notification && <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-xl text-white text-sm font-medium z-[100] animate-in slide-in-from-top-2 ${notification.type==='error'?'bg-red-500':'bg-slate-800'}`}>{notification.msg}</div>}
     </div>
