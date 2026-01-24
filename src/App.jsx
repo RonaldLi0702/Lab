@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 // 🟢 [正式部署]: 部署到 Vercel/GitHub 时，请务必取消下一行的注释！
-// import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import { 
   Beaker, Clock, User, CheckCircle, XCircle, 
   Plus, Trash2, Search, Upload, Camera, Menu, X, Settings,
