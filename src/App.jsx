@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-// 🟢 [正式部署]: 已启用真实连接
+// 🟢 [正式部署]: 部署到 Vercel/GitHub 时，请务必取消下一行的注释！
 import { createClient } from '@supabase/supabase-js';
 import { 
   Beaker, Clock, User, CheckCircle, XCircle, 
@@ -7,34 +7,10 @@ import {
   LogOut, Calendar as CalendarIcon, Users, UserPlus,
   ShieldAlert, ShieldCheck, Ban, Key, ChevronUp, Clock4, Crown, FileText,
   MousePointerClick, Edit3, Filter, ArrowUpDown, LayoutGrid, ClipboardList, Eye,
-  ChevronLeft, ChevronRight, Info, Save, ArrowLeft, CalendarDays
+  ChevronLeft, ChevronRight, Info, Save, ArrowLeft, CalendarDays, UserCog, Home
 } from 'lucide-react';
 
-// 🟡 [预览适配器]: 已注释禁用，确保连接真实数据库
-/*
-const createClient = (url, key) => {
-  console.log("Supabase Mock Init:", { url });
-  let mockDB = { Equipment: [], Reservations: [], AppUser: [], GlobalSettings: [] };
-  const delay = (ms) => new Promise(r => setTimeout(r, ms));
-  const mockChain = (t) => ({
-      select: () => {
-        let d = [...(mockDB[t]||[])];
-        const b = {
-          order: (c) => { d.sort((x,y)=>x[c]>y[c]?-1:1); return b; },
-          eq: (f,v) => { d=d.filter(i=>i[f]===v); return b; },
-          neq: (f,v) => { d=d.filter(i=>i[f]!==v); return b; },
-          then: (cb) => delay(50).then(()=>cb({data:d,error:null}))
-        }; return b;
-      },
-      insert: (d) => ({ then: (cb) => { const n=(Array.isArray(d)?d:[d]).map(i=>({...i,id:Date.now()+Math.random(),created_at:new Date().toISOString()})); if(!mockDB[t])mockDB[t]=[]; mockDB[t].push(...n); delay(50).then(()=>cb({data:n,error:null})); } }),
-      update: (d) => ({ eq: (f,v) => ({ then: (cb) => { if(mockDB[t])mockDB[t]=mockDB[t].map(i=>i[f]===v?{...i,...d}:i); delay(50).then(()=>cb({data:null,error:null})); } }) }),
-      delete: () => ({ eq: (f,v) => ({ then: (cb) => { if(mockDB[t])mockDB[t]=mockDB[t].filter(i=>i[f]!==v); delay(50).then(()=>cb({data:null,error:null})); } }) })
-  });
-  return { from: mockChain, storage: { from: () => ({ upload: async () => ({data:{path:'x'}}), getPublicUrl: () => ({data:{publicUrl:'https://placehold.co/400x300?text=Equipment+Image'}}) }) } };
-};
-*/
-
-// 🔴 🔴 🔴 请务必替换为您在 Supabase Settings -> API 获取的真实数据 🔴 🔴 🔴
+// 🔴 请务必替换为您在 Supabase Settings -> API 获取的真实数据
 const SUPABASE_URL = "https://rcmogvyepjhwexeojjuy.supabase.co"; 
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbW9ndnllcGpod2V4ZW9qanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwNzgwNjksImV4cCI6MjA4NDY1NDA2OX0.UIYJABF3-V3_po_xdfDhQK394_jEsxF6MPxBhsqLpZk";
 
@@ -45,7 +21,7 @@ const DEFAULT_RULES = {
 };
 
 // 布局常量
-const GRID_HEIGHT = 1440; // 24小时 * 60px/小时
+const GRID_HEIGHT = 1440; 
 const HEADER_HEIGHT_STYLE = { height: '50px' }; 
 
 // 工具函数
@@ -59,22 +35,12 @@ const generateColor = (str) => {
 const formatDate = (d) => d.toISOString().split('T')[0];
 const addDays = (d, days) => { const r = new Date(d); r.setDate(r.getDate() + days); return r; };
 
-// 中文日期格式化
 const formatDateTimeCN = (dateStr, timeStr) => {
   if (!dateStr || !timeStr) return "";
   const d = new Date(dateStr);
   return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${timeStr}`;
 };
 
-// 0-24小时映射到像素位置
-const timeToPx = (timeStr) => {
-  if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
-  if (h === 24) return GRID_HEIGHT;
-  return (h * 60 + m) * (GRID_HEIGHT / 1440);
-};
-
-// 像素映射到时间 (分钟)
 const pxToTimeStr = (px) => {
   let totalMins = Math.floor((px / GRID_HEIGHT) * 1440);
   totalMins = Math.max(0, Math.min(1440, totalMins)); 
@@ -85,6 +51,13 @@ const pxToTimeStr = (px) => {
   let m = totalMins % 60;
   if (h === 24) return "24:00"; 
   return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+};
+
+const timeToPx = (timeStr) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (h === 24) return GRID_HEIGHT;
+  return (h * 60 + m) * (GRID_HEIGHT / 1440);
 };
 
 export default function App() {
@@ -104,7 +77,7 @@ export default function App() {
   const [adminTab, setAdminTab] = useState("equipments");
   const [selectedEq, setSelectedEq] = useState(null); 
   
-  const [modals, setModals] = useState({ eq:false, rule:false, pwd:false, user:false, limit:false });
+  const [modals, setModals] = useState({ eq:false, rule:false, pwd:false, user:false, limit:false, booking: false, rename: false });
   
   const [authMode, setAuthMode] = useState("login"); 
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
@@ -114,26 +87,25 @@ export default function App() {
   const [previewImage, setPreviewImage] = useState("");
   const [newUserForm, setNewUserForm] = useState({ username: "", password: "" });
   const [pwdForm, setPwdForm] = useState({ oldPass: "", newPass: "", confirmPass: "" });
+  const [renameForm, setRenameForm] = useState("");
   const [limitForm, setLimitForm] = useState({ userId: null, username: "", hours: "" });
 
   const [dragState, setDragState] = useState({ isDragging: false, dayIndex: null, startY: 0, currentY: 0 });
   const [weekStart, setWeekStart] = useState(new Date()); 
-  const fileInputRef = useRef(null);
-  const timelineRef = useRef(null);
-
-  // 新增：详情弹窗状态
   const [detailModal, setDetailModal] = useState(null);
 
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
   const [filterConfig, setFilterConfig] = useState({ status: 'all', equipmentId: 'all' });
+
+  const fileInputRef = useRef(null);
+  const timelineRef = useRef(null);
 
   useEffect(() => { refreshData(); }, [userRole]);
 
   const refreshData = async () => {
     setLoading(true);
     try {
-      const { data: rules, error: rErr } = await supabase.from('GlobalSettings').select('*');
-      if (rErr) throw rErr;
+      const { data: rules } = await supabase.from('GlobalSettings').select('*');
       if (rules && rules.length > 0) {
         const ruleObj = rules[0];
         setGlobalRules({ ...DEFAULT_RULES, ...ruleObj });
@@ -142,100 +114,87 @@ export default function App() {
       }
 
       if (userRole !== 'guest') {
-        const { data: eqs, error: eErr } = await supabase.from('Equipment').select('*').order('created_at', { ascending: false });
-        if (eErr) throw eErr;
+        const { data: eqs } = await supabase.from('Equipment').select('*').order('created_at', { ascending: false });
         if(eqs) setEquipmentList(eqs);
-
-        const { data: ress, error: rsErr } = await supabase.from('Reservations').select('*').order('created_at', { ascending: false });
-        if (rsErr) throw rsErr;
+        const { data: ress } = await supabase.from('Reservations').select('*').order('created_at', { ascending: false });
         if(ress) setReservations(ress);
-
         if (userRole === 'admin') {
-            const { data: users, error: uErr } = await supabase.from('AppUser').select('*').order('created_at', { ascending: false });
-            if (uErr) throw uErr;
+            const { data: users } = await supabase.from('AppUser').select('*').order('created_at', { ascending: false });
             if(users) setUserList(users);
         }
       }
     } catch (e) { 
       console.error(e);
-      // 如果未配置 Supabase，这里会报错
-      if(SUPABASE_URL.includes("YOUR_")) {
-          showToast("请配置 Supabase URL 和 Key", "error");
-      } else {
-          showToast("数据加载失败: " + e.message, "error"); 
-      }
+      if(SUPABASE_URL.includes("YOUR_")) showToast("请配置Supabase连接", "error");
     }
     setLoading(false);
   };
 
   const showToast = (msg, type = "success") => {
-    setNotification({ msg, type });
+    setNotification({ msg: String(msg), type });
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // --- 拖拽交互 ---
+  const saveRules = async () => {
+    setLoading(true);
+    try {
+      const payload = { 
+        maxDuration: Number(globalRules.maxDuration), 
+        weekendOpen: Boolean(globalRules.weekendOpen), 
+        needAudit: Boolean(globalRules.needAudit), 
+        maxAdvanceDays: Number(globalRules.maxAdvanceDays), 
+        minCancelHours: Number(globalRules.minCancelHours) 
+      };
+
+      if (ruleId) {
+          await supabase.from('GlobalSettings').update(payload).eq('id', ruleId);
+      } else {
+          const { data } = await supabase.from('GlobalSettings').insert([payload]).select();
+          if(data && data[0]) setRuleId(data[0].id);
+      }
+      setModals(p => ({...p, rule: false}));
+      showToast("规则已更新");
+    } catch (e) {
+      showToast("保存失败: " + e.message, "error");
+    }
+    setLoading(false);
+  };
+
   const handlePointerDown = (dayIndex, e) => {
     if (currentUser?.isBlocked) return showToast("账号被封禁", "error");
     if (!e.target.classList.contains('timeline-bg')) return; 
-
     e.currentTarget.setPointerCapture(e.pointerId); 
     const rect = e.currentTarget.getBoundingClientRect();
     const relativeY = e.clientY - rect.top;
-    
     setDragState({ isDragging: true, dayIndex, startY: relativeY, currentY: relativeY });
   };
-
   const handlePointerMove = (e) => {
     if (!dragState.isDragging) return;
     const rect = e.currentTarget.getBoundingClientRect();
     let relativeY = e.clientY - rect.top;
-    relativeY = Math.max(0, Math.min(GRID_HEIGHT, relativeY)); // Clamp
+    relativeY = Math.max(0, Math.min(GRID_HEIGHT, relativeY)); 
     setDragState(prev => ({ ...prev, currentY: relativeY }));
   };
-
   const handlePointerUp = (e) => {
     if (!dragState.isDragging) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
-    
     const startY = dragState.startY;
     const endY = dragState.currentY;
-
     let startMin = Math.floor((Math.min(startY, endY) / GRID_HEIGHT) * 1440);
     let endMin = Math.floor((Math.max(startY, endY) / GRID_HEIGHT) * 1440);
-
-    // 吸附
-    startMin = Math.round(startMin / 15) * 15;
-    endMin = Math.round(endMin / 15) * 15;
-
-    if (endMin - startMin < 30) endMin = startMin + 30;
-    if (endMin > 1440) endMin = 1440;
-
+    startMin = Math.round(startMin / 15) * 15; endMin = Math.round(endMin / 15) * 15;
+    if (endMin - startMin < 30) endMin = startMin + 30; if (endMin > 1440) endMin = 1440;
     const dateStr = formatDate(addDays(weekStart, dragState.dayIndex));
-    
-    const formatTime = (m) => {
-        if(m===1440) return "24:00"; 
-        const hh = Math.floor(m/60).toString().padStart(2,'0');
-        const mm = (m%60).toString().padStart(2,'0');
-        return `${hh}:${mm}`;
-    };
-
-    setBookingForm({
-        id: null,
-        startDate: dateStr,
-        startTime: formatTime(startMin),
-        endDate: dateStr,
-        endTime: formatTime(endMin),
-        note: ""
-    });
+    const formatTime = (m) => { if(m===1440) return "24:00"; const hh = Math.floor(m/60).toString().padStart(2,'0'); const mm = (m%60).toString().padStart(2,'0'); return `${hh}:${mm}`; };
+    setBookingForm({ id: null, startDate: dateStr, startTime: formatTime(startMin), endDate: dateStr, endTime: formatTime(endMin), note: "" });
     setModals(prev => ({ ...prev, booking: true }));
     setDragState({ isDragging: false, dayIndex: null, startY: 0, currentY: 0 });
   };
 
-  // --- 提交预约 ---
   const submitBooking = async () => {
     if (currentUser?.isBlocked) return showToast("账号被封禁", "error");
     const { id, startDate, startTime, endDate, endTime, note } = bookingForm;
-    if (!startDate || !startTime || !endDate || !endTime) return showToast("请完整填写时间", "error");
+    if (!startDate || !startTime || !endDate || !endTime) return showToast("请完整填写", "error");
 
     const startT = new Date(`${startDate}T${startTime === '24:00' ? '23:59:59' : startTime}`); 
     let endT = new Date(`${endDate}T${endTime === '24:00' ? '23:59:59' : endTime}`);
@@ -276,38 +235,24 @@ export default function App() {
           status: (userRole === 'admin' || !globalRules.needAudit) ? 'approved' : 'pending' 
       };
 
-      let error;
-      if (id) {
-          const res = await supabase.from('Reservations').update(payload).eq('id', id);
-          error = res.error;
-      } else {
-          const res = await supabase.from('Reservations').insert([payload]);
-          error = res.error;
-      }
-      
-      if(error) throw error;
+      if (id) await supabase.from('Reservations').update(payload).eq('id', id);
+      else await supabase.from('Reservations').insert([payload]);
       
       await refreshData();
       showToast(id ? "修改成功" : "预约成功");
       setModals(prev => ({ ...prev, booking: false }));
-    } catch (e) { 
-        console.error(e);
-        showToast("操作失败: " + e.message, "error"); 
-    }
+    } catch (e) { showToast("操作失败", "error"); }
     setLoading(false);
   };
 
-  // --- 通用处理 ---
   const handleLogin = async () => {
     setLoading(true);
     if (loginForm.username === 'admin' && loginForm.password === adminPassword) {
         setUserRole('admin');
         setCurrentUser({ username: '超级管理员', role: 'admin' });
     } else {
-        const { data, error } = await supabase.from('AppUser').select('*').eq('username', loginForm.username);
-        if (error) {
-            showToast("登录查询失败", "error");
-        } else if (data?.[0] && data[0].password === loginForm.password) {
+        const { data } = await supabase.from('AppUser').select('*').eq('username', loginForm.username);
+        if (data?.[0] && data[0].password === loginForm.password) {
             const u = data[0];
             setUserRole(u.role==='admin'?'admin':'student');
             setCurrentUser({ ...u, isBlocked: !!u.isBlocked });
@@ -315,6 +260,7 @@ export default function App() {
     }
     setLoading(false);
   };
+
   const handleRegister = async () => {
     if (regForm.password !== regForm.confirmPass) return showToast("密码不一致", "error");
     setLoading(true);
@@ -323,24 +269,39 @@ export default function App() {
     await supabase.from('AppUser').insert([{ username: regForm.username, password: regForm.password, role: 'student' }]);
     showToast("注册成功"); setAuthMode('login'); setLoading(false);
   };
+
   const handleSaveEquipment = async (e) => {
       e.preventDefault(); setLoading(true);
       let url = eqForm.imageUrl;
       if (eqForm.image instanceof File) {
           const name = `${Date.now()}_${eqForm.image.name}`;
           await supabase.storage.from('equipment-images').upload(name, eqForm.image);
-          url = supabase.storage.from('equipment-images').getPublicUrl(name).data.publicUrl;
+          const { data } = supabase.storage.from('equipment-images').getPublicUrl(name);
+          url = data.publicUrl;
       }
-      const p = { ...eqForm, imageUrl: url || "https://placehold.co/400x300", created_at: new Date() }; delete p.image;
+      const p = { name: eqForm.name, type: eqForm.type, location: eqForm.location, status: eqForm.status, imageUrl: url || "https://placehold.co/400x300", created_at: new Date() };
       if(eqForm.id) await supabase.from('Equipment').update(p).eq('id', eqForm.id);
       else await supabase.from('Equipment').insert([p]);
       refreshData(); setModals({...modals, eq:false}); setLoading(false); showToast("设备已保存");
   };
+
+  const handleDeleteEquipment = async (id) => { if(!confirm("确定删除?"))return; setLoading(true); try { await supabase.from('Equipment').delete().eq('id', id); refreshData(); showToast("已删除"); } catch(e) { showToast("失败","error"); } setLoading(false); };
   const handlePromote = async (u) => { await supabase.from('AppUser').update({ role: u.role==='admin'?'student':'admin' }).eq('id', u.id); refreshData(); showToast("权限变更"); };
   const handleLimitSave = async () => { await supabase.from('AppUser').update({ bookingLimit: limitForm.hours?parseFloat(limitForm.hours):null }).eq('id', limitForm.userId); refreshData(); setModals({...modals,limit:false}); showToast("限制已保存"); };
-  const saveRules = async () => { setLoading(true); const p={...globalRules}; delete p.id; delete p.created_at; if(ruleId) await supabase.from('GlobalSettings').update(p).eq('id', ruleId); else await supabase.from('GlobalSettings').insert([p]); setLoading(false); setModals({...modals,rule:false}); showToast("规则已保存"); };
-  const handleCancelBooking = async (res) => { if(!confirm("取消预约?"))return; await supabase.from('Reservations').delete().eq('id', res.id); refreshData(); showToast("已取消"); };
-  const handleEditBooking = (res) => { setBookingForm({ id:res.id, startDate:res.date, startTime:res.startTime, endDate:res.endDate||res.date, endTime:res.endTime, note:res.note||"" }); setModals(p => ({...p, booking: true})); };
+  
+  const handleCancelBooking = async (res) => { 
+      const deadline = new Date(new Date(`${res.date}T${res.startTime}`).getTime() - globalRules.minCancelHours * 36e5);
+      if (new Date() > deadline && userRole !== 'admin') return showToast(`距离开始不足 ${globalRules.minCancelHours} 小时，无法操作`, "error");
+      if(!confirm("取消预约?")) return; 
+      await supabase.from('Reservations').delete().eq('id', res.id); refreshData(); showToast("已取消"); 
+  };
+  
+  const handleEditBooking = (res) => { 
+      const deadline = new Date(new Date(`${res.date}T${res.startTime}`).getTime() - globalRules.minCancelHours * 36e5);
+      if (new Date() > deadline && userRole !== 'admin') return showToast(`距离开始不足 ${globalRules.minCancelHours} 小时，无法修改`, "error");
+      setBookingForm({ id:res.id, startDate:res.date, startTime:res.startTime, endDate:res.endDate||res.date, endTime:res.endTime, note:res.note||"" }); setModals(p => ({...p, booking: true})); 
+  };
+  
   const handleChangePassword = async () => { 
       const { oldPass, newPass, confirmPass } = pwdForm;
       if (!oldPass || !newPass || !confirmPass) return showToast("请填写完整", "error");
@@ -358,10 +319,23 @@ export default function App() {
       }
       showToast("密码修改成功"); setModals({...modals, pwd:false}); setLoading(false);
   };
-  const handleAdminAddUser = async () => {
-    setLoading(true); await supabase.from('AppUser').insert([{ username: newUserForm.username, password: newUserForm.password, role: 'student', isBlocked: false }]);
-    refreshData(); setModals({...modals, user:false}); setLoading(false); showToast("用户添加成功");
+  const handleAdminAddUser = async () => { setLoading(true); await supabase.from('AppUser').insert([{ username: newUserForm.username, password: newUserForm.password, role: 'student', isBlocked: false }]); refreshData(); setModals({...modals, user:false}); setLoading(false); showToast("用户添加成功"); };
+  const handleRename = async () => {
+     if(!renameForm.trim()) return showToast("不能为空", "error");
+     setLoading(true);
+     try {
+        const { data } = await supabase.from('AppUser').select('*').eq('username', renameForm).neq('id', currentUser.id);
+        if(data?.length > 0) throw new Error("用户名已存在");
+        if(currentUser.role !== 'admin' || currentUser.username !== '超级管理员') {
+            await supabase.from('AppUser').update({ username: renameForm }).eq('id', currentUser.id);
+        }
+        await supabase.from('Reservations').update({ user: renameForm }).eq('user', currentUser.username);
+        setCurrentUser(p => ({...p, username: renameForm})); setModals(p => ({...p, rename: false})); await refreshData(); showToast("修改成功");
+     } catch(e) { showToast(e.message, "error"); } setLoading(false);
   };
+  const handleDeleteUser = async (id) => { if (!confirm("警告：删除用户将连带删除其所有数据，确定吗？")) return; try { await supabase.from('AppUser').delete().eq('id', id); await refreshData(); showToast("已删除"); } catch(e) { showToast("失败", "error"); } };
+  const handleToggleBlock = async (user) => { try { await supabase.from('AppUser').update({ isBlocked: !user.isBlocked }).eq('id', user.id); await refreshData(); showToast(!user.isBlocked ? "已封禁" : "已解封"); } catch (e) { showToast("操作失败", "error"); } };
+  
   const getFilteredReservations = (publicView) => {
     let data = [...reservations];
     if (publicView && userRole !== 'admin') {
@@ -377,7 +351,6 @@ export default function App() {
       const currentDate = addDays(weekStart, dayIndex);
       const cellStart = new Date(currentDate); cellStart.setHours(0,0,0,0);
       const cellEnd = new Date(currentDate); cellEnd.setHours(23,59,59,999);
-
       const dayReservations = reservations.filter(r => r.equipmentId === selectedEq.id && r.status !== 'rejected').filter(r => {
          const rS = new Date(`${r.date}T${r.startTime}`);
          let rEndDate = r.endDate || r.date;
@@ -385,50 +358,28 @@ export default function App() {
          if(!r.endDate && rE <= rS) rE.setDate(rE.getDate()+1);
          return rS < cellEnd && rE > cellStart;
       });
-
       const isDragTarget = dragState.isDragging && dragState.dayIndex === dayIndex;
-
       return (
-          <div 
-            key={dayIndex} 
-            className="flex-1 border-r border-slate-200 relative bg-white group cursor-crosshair hover:bg-slate-50 transition-colors touch-none timeline-bg"
-            style={{ height: `${GRID_HEIGHT}px` }} 
-            onPointerDown={(e) => handlePointerDown(dayIndex, e)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          >
-             {[...Array(24)].map((_, i) => (
-                 <div key={i} className="absolute w-full border-b border-slate-100 pointer-events-none" style={{ top: `${(i/24)*100}%` }}></div>
-             ))}
-             
+          <div key={dayIndex} className="flex-1 border-r border-slate-200 relative bg-white group cursor-crosshair hover:bg-slate-50 transition-colors touch-none timeline-bg"
+            style={{ height: `${GRID_HEIGHT}px` }} onPointerDown={(e) => handlePointerDown(dayIndex, e)} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
+             {[...Array(24)].map((_, i) => <div key={i} className="absolute w-full border-b border-slate-100 pointer-events-none" style={{ top: `${(i/24)*100}%` }}></div>)}
              {dayReservations.map(r => {
                  const rS = new Date(`${r.date}T${r.startTime}`);
                  let rEndDate = r.endDate || r.date;
                  let rE = new Date(`${rEndDate}T${r.endTime}`);
                  if(!r.endDate && rE <= rS) rE.setDate(rE.getDate()+1);
-
                  const sTime = Math.max(rS.getTime(), cellStart.getTime());
                  const eTime = Math.min(rE.getTime(), cellEnd.getTime());
-                 
                  const top = (sTime - cellStart.getTime()) / 60000;
                  const height = (eTime - sTime) / 60000;
-
                  if (height <= 0) return null;
                  const colors = generateColor(r.user);
-                 
                  const startStr = formatDateTimeCN(r.date, r.startTime);
                  const endStr = formatDateTimeCN(r.endDate || r.date, r.endTime);
-
                  return (
-                     <div 
-                        key={r.id}
-                        className="absolute left-1 right-1 rounded px-1.5 text-[10px] overflow-hidden shadow-sm pointer-events-auto cursor-pointer z-10 group/block hover:z-20 transition-all hover:scale-[1.02] hover:shadow-md flex flex-col justify-start py-1 border-l-4"
+                     <div key={r.id} className="absolute left-1 right-1 rounded px-1.5 text-[10px] overflow-hidden shadow-sm pointer-events-auto cursor-pointer z-10 group/block hover:z-20 transition-all flex flex-col justify-start py-1 border-l-4"
                         style={{ top: `${top}px`, height: `${height}px`, backgroundColor: colors.bg, borderColor: colors.border, color: colors.text }}
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setDetailModal(r); 
-                        }}
-                        title={`点击查看详情`}
+                        onClick={(e) => { e.stopPropagation(); setDetailModal(r); }} title={`点击查看详情`}
                      >
                         <div className="font-bold truncate leading-tight">{startStr} 至 {endStr}</div>
                         <div className="truncate font-medium mt-0.5">👤 {r.user}</div>
@@ -436,83 +387,91 @@ export default function App() {
                      </div>
                  );
              })}
-
-             {isDragTarget && (
-                <div className="absolute left-0 right-0 bg-blue-500/30 border-y-2 border-blue-500 z-30 pointer-events-none"
-                     style={{ top: `${Math.min(dragState.startY, dragState.currentY)}px`, height: `${Math.abs(dragState.currentY - dragState.startY)}px` }} />
-             )}
+             {isDragTarget && <div className="absolute left-0 right-0 bg-blue-500/30 border-y-2 border-blue-500 z-30 pointer-events-none" style={{ top: `${Math.min(dragState.startY, dragState.currentY)}px`, height: `${Math.abs(dragState.currentY - dragState.startY)}px` }} />}
           </div>
       );
   };
 
-  // --- Render ---
+  const getNavItems = (role) => {
+    const items = [
+      { id: 'dashboard', label: '设备大厅', icon: LayoutGrid },
+      { id: 'public_schedule', label: '预约公示', icon: Eye },
+      { id: 'my_bookings', label: '我的预约', icon: Clock4 }
+    ];
+    if (role === 'admin') {
+      items.push({ id: 'admin_panel', label: '管理后台', icon: ClipboardList });
+    }
+    return items;
+  };
 
   if (userRole === 'guest') return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center text-slate-800 mb-6 flex justify-center items-center gap-2"><Beaker className="text-blue-600"/> 实验室预约</h1>
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md animate-in zoom-in-95">
+        <h1 className="text-2xl font-bold text-center text-slate-800 mb-6 flex justify-center items-center gap-2"><Beaker className="text-blue-600"/> 实验室预约系统</h1>
         <div className="flex bg-slate-100 p-1 rounded-lg mb-6">
            {['login','register'].map(m => <button key={m} onClick={()=>setAuthMode(m)} className={`flex-1 py-2 text-sm rounded ${authMode===m?'bg-white shadow text-blue-600':'text-slate-500'}`}>{m==='login'?'登录':'注册'}</button>)}
         </div>
         <div className="space-y-4">
-           <input className="w-full p-3 border rounded" placeholder="用户名" value={authMode==='login'?loginForm.username:regForm.username} onChange={e=>authMode==='login'?setLoginForm({...loginForm,username:e.target.value}):setRegForm({...regForm,username:e.target.value})}/>
+           <input className="w-full p-3 border rounded" placeholder="用户名 (支持中文)" value={authMode==='login'?loginForm.username:regForm.username} onChange={e=>authMode==='login'?setLoginForm({...loginForm,username:e.target.value}):setRegForm({...regForm,username:e.target.value})}/>
            <input type="password" className="w-full p-3 border rounded" placeholder="密码" value={authMode==='login'?loginForm.password:regForm.password} onChange={e=>authMode==='login'?setLoginForm({...loginForm,password:e.target.value}):setRegForm({...regForm,password:e.target.value})}/>
            {authMode==='register' && <input type="password" className="w-full p-3 border rounded" placeholder="确认密码" value={regForm.confirmPass} onChange={e=>setRegForm({...regForm,confirmPass:e.target.value})}/>}
            <button onClick={authMode==='login'?handleLogin:handleRegister} className="w-full bg-blue-600 text-white py-3 rounded font-bold hover:bg-blue-700">{authMode==='login'?'立即登录':'注册账号'}</button>
         </div>
       </div>
-      {notification && <div className="fixed bottom-8 bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg">{notification.msg}</div>}
+      {notification && <div className="fixed bottom-8 bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg z-50">{notification.msg}</div>}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
-      <header className="bg-white border-b sticky top-0 z-30 px-4 h-16 flex items-center justify-between shadow-sm">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-24 md:pb-0">
+      <header className="bg-white border-b sticky top-0 z-30 px-4 h-16 hidden md:flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2 font-bold text-lg"><Beaker className="text-blue-600"/> LabManager</div>
-        <div className="hidden md:flex bg-slate-100 p-1 rounded-lg text-sm font-medium">
-           {[
-             {id:'dashboard', icon:LayoutGrid, label:'设备大厅'},
-             {id:'public_schedule', icon:Eye, label:'预约公示'},
-             {id:'my_bookings', icon:Clock4, label:'我的预约'},
-             ...(userRole==='admin'?[{id:'admin_panel', icon:ClipboardList, label:'管理后台'}]:[])
-           ].map(tab => (
-             <button key={tab.id} onClick={()=>setMainView(tab.id)} className={`px-4 py-1.5 rounded flex items-center gap-1 ${mainView===tab.id?'bg-white shadow text-blue-700':'text-slate-500 hover:text-slate-700'}`}>
-               <tab.icon size={16}/> {tab.label}
+        <div className="flex bg-slate-100 p-1 rounded-lg text-sm font-medium">
+           {getNavItems(userRole).map(t => (
+             <button key={t.id} onClick={()=>setMainView(t.id)} className={`px-4 py-1.5 rounded flex items-center gap-1 ${mainView===t.id?'bg-white shadow text-blue-700':'text-slate-500 hover:text-slate-700'}`}>
+               <t.icon size={16}/> {t.label}
              </button>
            ))}
         </div>
         <div className="flex items-center gap-4">
-           <span className="text-sm font-bold flex items-center gap-1">{currentUser?.username} {currentUser?.role==='admin' && <Crown size={14} className="text-amber-500"/>}</span>
-           <button onClick={()=>{setUserRole('guest');setCurrentUser(null);}}><LogOut size={20} className="text-slate-400 hover:text-red-600"/></button>
+           <button onClick={()=>{setRenameForm(currentUser.username);setModals(p=>({...p,rename:true}))}} className="text-sm font-bold flex items-center gap-1 hover:bg-slate-100 px-2 py-1 rounded">{currentUser?.username} {currentUser?.role==='admin' && <Crown size={14} className="text-amber-500"/>} <UserCog size={14} className="text-slate-400"/></button>
+           <div className="flex gap-2">
+              <button onClick={()=>setModals({...modals, pwd:true})} className="text-slate-400 hover:text-blue-600 p-1"><Key size={18}/></button>
+              <button onClick={()=>{setUserRole('guest');setCurrentUser(null);}} className="text-slate-400 hover:text-red-600 p-1"><LogOut size={18}/></button>
+           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-40 flex justify-around p-2 text-xs safe-area-pb">
+          {getNavItems(userRole).map(t=>
+             <button key={t.id} onClick={()=>setMainView(t.id)} className={`flex flex-col items-center gap-1 p-2 rounded ${mainView===t.id?'text-blue-600':'text-slate-400'}`}><t.icon size={20}/>{t.label}</button>
+          )}
+          <button onClick={()=>{setRenameForm(currentUser.username);setModals(p=>({...p,rename:true}))}} className="flex flex-col items-center gap-1 p-2 text-slate-400"><UserCog size={20}/>设置</button>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 py-4 md:py-6">
         {loading && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow z-50 text-sm text-blue-600 flex items-center gap-2">处理中...</div>}
 
-        {/* 1. 设备大厅 */}
         {mainView === 'dashboard' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">设备预约大厅</h2>
-                {userRole==='admin' && <button onClick={()=>{setEqForm({name:"",type:"",location:"",status:"active",image:null});setPreviewImage("");setModals({...modals,eq:true})}} className="bg-blue-600 text-white px-3 py-2 rounded flex gap-1 items-center hover:bg-blue-700"><Plus size={16}/> 添加设备</button>}
+                <h2 className="text-xl font-bold">设备预约大厅</h2>
+                {userRole==='admin' && (
+                   <button onClick={()=>{setEqForm({name:"",type:"",location:"",status:"active",image:null});setPreviewImage("");setModals({...modals,eq:true})}} className="bg-blue-600 text-white px-3 py-1.5 rounded flex gap-1 items-center text-sm"><Plus size={16}/> 添加</button>
+                )}
              </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                {equipmentList.map(item => (
                  <div key={item.id} className="bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-shadow">
-                    <div className="h-48 bg-slate-100 relative">
+                    <div className="h-40 bg-slate-100 relative">
                        <img src={item.imageUrl} className="w-full h-full object-cover"/>
                        <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold bg-white/90 ${item.status==='active'?'text-green-600':'text-red-500'}`}>{item.status==='active'?'可预约':'维护中'}</div>
                     </div>
                     <div className="p-4">
                        <h3 className="font-bold text-lg">{item.name}</h3>
                        <p className="text-xs text-slate-500 mt-1">{item.location} | {item.type}</p>
-                       <button 
-                         onClick={() => { setSelectedEq(item); setWeekStart(new Date()); setBookingForm({id:null, startDate:formatDate(new Date()), startTime:"", endDate:formatDate(new Date()), endTime:"", note:""}); }}
-                         disabled={item.status!=='active'}
-                         className={`w-full mt-4 py-2 rounded font-medium ${item.status==='active'?'bg-slate-900 text-white hover:bg-slate-800':'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-                       >
-                         {item.status==='active' ? '查看排期表 & 预约' : '暂停使用'}
+                       <button onClick={() => { setSelectedEq(item); setWeekStart(new Date()); setBookingForm({id:null, startDate:formatDate(new Date()), startTime:"", endDate:formatDate(new Date()), endTime:"", note:""}); }} disabled={item.status!=='active'} className={`w-full mt-3 py-2 rounded font-medium text-sm ${item.status==='active'?'bg-slate-900 text-white':'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                         {item.status==='active' ? '查看排期 & 预约' : '暂停使用'}
                        </button>
                     </div>
                  </div>
@@ -521,11 +480,10 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. 预约公示 */}
         {mainView === 'public_schedule' && (
            <div className="space-y-4">
              <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
-                <h2 className="text-lg font-bold">预约公示 <span className="text-xs font-normal text-slate-500 ml-2">{userRole==='admin'?"(历史全量)":"(当前及未来)"}</span></h2>
+                <h2 className="text-lg font-bold">预约公示</h2>
                 <div className="flex gap-2 text-sm">
                     <select className="border p-1.5 rounded" value={filterConfig.status} onChange={e=>setFilterConfig({...filterConfig, status:e.target.value})}>
                        <option value="all">所有状态</option><option value="approved">已通过</option><option value="pending">待审核</option>
@@ -564,7 +522,6 @@ export default function App() {
            </div>
         )}
 
-        {/* 3. 我的预约 */}
         {mainView === 'my_bookings' && (
            <div className="grid gap-4">
              {reservations.filter(r => r.user === currentUser?.username).map(res => (
@@ -579,40 +536,67 @@ export default function App() {
            </div>
         )}
 
-        {/* 4. 管理后台 */}
         {mainView === 'admin_panel' && userRole === 'admin' && (
-           <div className="space-y-6">
-              <div className="flex gap-4 border-b pb-2">
-                 {['equipments:设备管理','users:用户权限','rules:规则设置'].map(t=><button key={t} onClick={()=>setAdminTab(t.split(':')[0])} className={`pb-2 px-2 text-sm font-medium ${adminTab===t.split(':')[0]?'text-blue-600 border-b-2 border-blue-600':'text-slate-500'}`}>{t.split(':')[1]}</button>)}
+           <div className="space-y-4">
+              <div className="flex gap-2 border-b overflow-x-auto">
+                 {['equipments:设备','users:用户','rules:规则'].map(t=><button key={t} onClick={()=>setAdminTab(t.split(':')[0])} className={`pb-2 px-3 text-sm whitespace-nowrap ${adminTab===t.split(':')[0]?'text-blue-600 border-b-2 border-blue-600':'text-slate-500'}`}>{t.split(':')[1]}</button>)}
               </div>
-              {adminTab === 'equipments' && (
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {equipmentList.map(item => (
-                     <div key={item.id} className="bg-white p-4 rounded border flex justify-between items-center">
-                         <div><div className="font-bold">{item.name}</div><div className="text-xs text-slate-500">{item.location}</div></div>
-                         <button onClick={()=>{if(confirm('删除?')) supabase.from('Equipment').delete().eq('id',item.id).then(refreshData)}} className="text-red-500"><Trash2 size={16}/></button>
-                     </div>
-                   ))}
-                 </div>
-              )}
               {adminTab === 'users' && (
                  <div className="bg-white rounded border overflow-hidden">
-                    <table className="w-full text-sm text-left">
-                       <thead className="bg-slate-50 border-b"><tr><th className="p-3">用户</th><th className="p-3">角色</th><th className="p-3">时长</th><th className="p-3 text-right">操作</th></tr></thead>
-                       <tbody>{userList.map(u=>(<tr key={u.id}><td className="p-3">{u.username}</td><td className="p-3">{u.role}</td><td className="p-3">{u.bookingLimit||'默认'}</td><td className="p-3 text-right"><button onClick={()=>setLimitForm({userId:u.id,username:u.username,hours:u.bookingLimit||""})||setModals({...modals,limit:true})}><Clock4 size={14}/></button> <button onClick={()=>handlePromote(u)}><Crown size={14}/></button> <button onClick={()=>supabase.from('AppUser').update({isBlocked:!u.isBlocked}).eq('id',u.id).then(refreshData)}>{u.isBlocked?<ShieldCheck size={14}/>:<ShieldAlert size={14}/>}</button></td></tr>))}</tbody>
-                    </table>
+                    <div className="p-3 border-b flex justify-between items-center"><span className="font-bold text-sm">用户列表</span><button onClick={()=>setModals({...modals, user:true})} className="text-blue-600 text-xs flex items-center"><UserPlus size={14}/>添加</button></div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left whitespace-nowrap">
+                        <thead className="bg-slate-50"><tr><th className="p-3">用户</th><th className="p-3">角色</th><th className="p-3">操作</th></tr></thead>
+                        <tbody>{userList.map(u=>(<tr key={u.id} className="border-b"><td className="p-3">{u.username}</td><td className="p-3">{u.role}</td><td className="p-3 flex gap-3"><button onClick={()=>setLimitForm({userId:u.id,username:u.username,hours:u.bookingLimit||""})||setModals({...modals,limit:true})}><Clock4 size={16}/></button><button onClick={()=>handlePromote(u)}><Crown size={16}/></button><button onClick={()=>handleDeleteUser(u.id)} className="text-red-500"><Trash2 size={16}/></button></td></tr>))}</tbody>
+                        </table>
+                    </div>
+                 </div>
+              )}
+              {adminTab === 'equipments' && (
+                 <div className="space-y-4">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {equipmentList.map(item => (
+                       <div key={item.id} className="bg-white p-4 rounded border flex justify-between items-center shadow-sm">
+                           <div className="flex items-center gap-3">
+                             <div className="w-12 h-12 bg-slate-100 rounded overflow-hidden"><img src={item.imageUrl} className="w-full h-full object-cover"/></div>
+                             <div><div className="font-bold text-sm">{item.name}</div><div className="text-xs text-slate-500">{item.location}</div></div>
+                           </div>
+                           <button onClick={()=>{if(confirm('删除设备?')) handleDeleteEquipment(item.id)}} className="text-red-500 p-2 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+                       </div>
+                     ))}
+                   </div>
                  </div>
               )}
               {adminTab === 'rules' && (
                  <div className="bg-white p-6 rounded-xl border max-w-lg space-y-4">
                     <h3 className="font-bold border-b pb-2">全局规则配置</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-xs text-slate-500">默认最大时长(h)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxDuration} onChange={e=>setGlobalRules({...globalRules,maxDuration:Number(e.target.value)})}/></div>
-                        <div><label className="text-xs text-slate-500">最大提前天数</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxAdvanceDays} onChange={e=>setGlobalRules({...globalRules,maxAdvanceDays:Number(e.target.value)})}/></div>
-                        <div><label className="text-xs text-slate-500">修改截至(h)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.minCancelHours} onChange={e=>setGlobalRules({...globalRules,minCancelHours:Number(e.target.value)})}/></div>
+                    <div className="grid grid-cols-1 gap-4">
+                        <div>
+                            <label className="text-sm font-medium text-slate-700 block mb-1">默认单次最大预约时长 (小时)</label>
+                            <input type="number" className="border p-2 w-full rounded" value={globalRules.maxDuration} onChange={e=>setGlobalRules({...globalRules,maxDuration:Number(e.target.value)})}/>
+                            <p className="text-xs text-slate-400 mt-1">超过此时间需管理员审核或拥有特殊权限。</p>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-slate-700 block mb-1">最大提前预约天数</label>
+                            <input type="number" className="border p-2 w-full rounded" value={globalRules.maxAdvanceDays} onChange={e=>setGlobalRules({...globalRules,maxAdvanceDays:Number(e.target.value)})}/>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-slate-700 block mb-1">修改/取消截止时间 (开始前 X 小时)</label>
+                            <input type="number" className="border p-2 w-full rounded" value={globalRules.minCancelHours} onChange={e=>setGlobalRules({...globalRules,minCancelHours:Number(e.target.value)})}/>
+                            <p className="text-xs text-slate-400 mt-1">距离预约开始时间小于此设定时，普通用户不可修改或取消。</p>
+                        </div>
                     </div>
-                    <div className="flex gap-4"><label className="flex items-center gap-1"><input type="checkbox" checked={globalRules.weekendOpen} onChange={e=>setGlobalRules({...globalRules,weekendOpen:e.target.checked})}/> 周末开放</label><label className="flex items-center gap-1"><input type="checkbox" checked={globalRules.needAudit} onChange={e=>setGlobalRules({...globalRules,needAudit:e.target.checked})}/> 人工审核</label></div>
-                    <button onClick={saveRules} className="btn-primary w-full py-2 rounded">保存全局规则</button>
+                    <div className="flex gap-6 pt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" className="w-4 h-4" checked={globalRules.weekendOpen} onChange={e=>setGlobalRules({...globalRules,weekendOpen:e.target.checked})}/> 
+                            <span className="text-sm">周末开放预约</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" className="w-4 h-4" checked={globalRules.needAudit} onChange={e=>setGlobalRules({...globalRules,needAudit:e.target.checked})}/> 
+                            <span className="text-sm">开启人工审核</span>
+                        </label>
+                    </div>
+                    <button onClick={saveRules} className="btn-primary w-full py-2 rounded mt-2">保存全局规则</button>
                  </div>
               )}
            </div>
@@ -728,10 +712,14 @@ export default function App() {
       )}
 
       {/* 其他小弹窗 */}
-      {modals.limit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><div className="bg-white p-6 rounded-xl w-80 space-y-4"><h3 className="font-bold">设置最大预约时长</h3><p className="text-sm text-slate-500">用户: {limitForm.username}</p><input type="number" className="border w-full p-2 rounded" placeholder="小时 (例如 24)" value={limitForm.hours} onChange={e=>setLimitForm({...limitForm, hours:e.target.value})}/><button onClick={handleLimitSave} className="w-full bg-blue-600 text-white py-2 rounded">保存</button><button onClick={()=>setModals({...modals,limit:false})} className="w-full text-slate-500 mt-2">取消</button></div></div>}
+      {modals.limit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-4"><h3 className="font-bold">设置时长限制</h3><p className="text-xs text-slate-500">用户: {limitForm.username}</p><input type="number" className="border w-full p-2 rounded" placeholder="小时" value={limitForm.hours} onChange={e=>setLimitForm({...limitForm, hours:e.target.value})}/><button onClick={handleLimitSave} className="w-full bg-blue-600 text-white py-2 rounded">保存</button><button onClick={()=>setModals({...modals,limit:false})} className="w-full text-slate-500 mt-2 text-center">取消</button></div></div>}
       {modals.eq && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><form onSubmit={handleSaveEquipment} className="bg-white p-6 rounded-xl w-80 space-y-3"><h3 className="font-bold">添加新设备</h3><div onClick={()=>fileInputRef.current.click()} className="h-32 bg-slate-100 rounded border-dashed border-2 flex items-center justify-center cursor-pointer">{previewImage||eqForm.imageUrl?<img src={previewImage||eqForm.imageUrl} className="h-full w-full object-cover"/>:<Camera className="text-slate-400"/>}</div><input type="file" hidden ref={fileInputRef} onChange={e=>{const f=e.target.files[0];if(f){setEqForm({...eqForm,image:f});setPreviewImage(URL.createObjectURL(f))}}}/><input placeholder="设备名称" className="border w-full p-2 rounded" value={eqForm.name} onChange={e=>setEqForm({...eqForm,name:e.target.value})} required/><input placeholder="位置" className="border w-full p-2 rounded" value={eqForm.location} onChange={e=>setEqForm({...eqForm,location:e.target.value})} required/><input placeholder="类型" className="border w-full p-2 rounded" value={eqForm.type} onChange={e=>setEqForm({...eqForm,type:e.target.value})} required/><button className="w-full bg-blue-600 text-white py-2 rounded">确认添加</button><button type="button" onClick={()=>setModals({...modals,eq:false})} className="w-full text-center text-slate-500 text-sm mt-2">取消</button></form></div>}
       {modals.pwd && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-3"><h3 className="font-bold">修改密码</h3><input type="password" placeholder="旧密码" className="border w-full p-2 rounded" value={pwdForm.oldPass} onChange={e=>setPwdForm({...pwdForm,oldPass:e.target.value})}/><input type="password" placeholder="新密码" className="border w-full p-2 rounded" value={pwdForm.newPass} onChange={e=>setPwdForm({...pwdForm,newPass:e.target.value})}/><input type="password" placeholder="确认新密码" className="border w-full p-2 rounded" value={pwdForm.confirmPass} onChange={e=>setPwdForm({...pwdForm,confirmPass:e.target.value})}/><button onClick={handleChangePassword} className="btn-primary w-full py-2 rounded">确认</button><button onClick={()=>setModals({...modals,pwd:false})} className="w-full text-center text-xs mt-2">取消</button></div></div>}
       {modals.user && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-3"><h3 className="font-bold">添加用户</h3><input placeholder="用户名" className="border p-2 w-full rounded" value={newUserForm.username} onChange={e=>setNewUserForm({...newUserForm,username:e.target.value})}/><input placeholder="密码" className="border p-2 w-full rounded" value={newUserForm.password} onChange={e=>setNewUserForm({...newUserForm,password:e.target.value})}/><button onClick={handleAdminAddUser} className="btn-primary w-full py-2 rounded">添加</button><button onClick={()=>setModals({...modals,user:false})} className="w-full text-center text-xs mt-2">取消</button></div></div>}
+      {modals.rename && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="bg-white p-6 rounded-xl w-80 space-y-4"><h3 className="font-bold">修改昵称</h3><input className="border w-full p-2 rounded" placeholder="新昵称" value={renameForm} onChange={e=>setRenameForm(e.target.value)}/><div className="flex gap-2"><button onClick={()=>setModals({...modals,rename:false})} className="flex-1 py-2 bg-slate-100 rounded">取消</button><button onClick={handleRename} className="flex-1 py-2 bg-blue-600 text-white rounded">确认</button></div></div></div>}
+      
+      {/* 规则设置弹窗 (Dashboard 快捷入口) */}
+      {modals.rule && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl w-full max-w-sm space-y-4"><h3 className="font-bold border-b pb-2">全局规则配置</h3><div className="grid grid-cols-1 gap-4"><div><label className="text-sm font-medium text-slate-700 block mb-1">默认单次最大预约时长 (小时)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxDuration} onChange={e=>setGlobalRules({...globalRules,maxDuration:Number(e.target.value)})}/><p className="text-xs text-slate-400 mt-1">超过此时间需管理员审核或拥有特殊权限。</p></div><div><label className="text-sm font-medium text-slate-700 block mb-1">最大提前预约天数</label><input type="number" className="border p-2 w-full rounded" value={globalRules.maxAdvanceDays} onChange={e=>setGlobalRules({...globalRules,maxAdvanceDays:Number(e.target.value)})}/></div><div><label className="text-sm font-medium text-slate-700 block mb-1">修改/取消截止时间 (开始前 X 小时)</label><input type="number" className="border p-2 w-full rounded" value={globalRules.minCancelHours} onChange={e=>setGlobalRules({...globalRules,minCancelHours:Number(e.target.value)})}/><p className="text-xs text-slate-400 mt-1">距离预约开始时间小于此设定时，普通用户不可修改或取消。</p></div></div><div className="flex gap-6 pt-2"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={globalRules.weekendOpen} onChange={e=>setGlobalRules({...globalRules,weekendOpen:e.target.checked})}/> <span className="text-sm">周末开放预约</span></label><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="w-4 h-4" checked={globalRules.needAudit} onChange={e=>setGlobalRules({...globalRules,needAudit:e.target.checked})}/> <span className="text-sm">开启人工审核</span></label></div><button onClick={saveRules} className="btn-primary w-full py-2 rounded mt-2">保存全局规则</button><button onClick={()=>setModals({...modals,rule:false})} className="text-xs text-center w-full mt-2 text-slate-500">关闭</button></div></div>}
 
       {notification && <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-xl text-white text-sm font-medium z-[100] animate-in slide-in-from-top-2 ${notification.type==='error'?'bg-red-500':'bg-slate-800'}`}>{notification.msg}</div>}
     </div>
