@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-// 🟢 [正式部署]: 部署到 Vercel/GitHub 时，请务必取消下一行的注释！
+// 🟢 [正式部署]: 已启用真实连接
 import { createClient } from '@supabase/supabase-js';
 import { 
   Beaker, Clock, User, CheckCircle, XCircle, 
@@ -10,7 +10,31 @@ import {
   ChevronLeft, ChevronRight, Info, Save, ArrowLeft, CalendarDays
 } from 'lucide-react';
 
-// 🔴 请务必替换为您在 Supabase Settings -> API 获取的真实数据
+// 🟡 [预览适配器]: 已注释禁用，确保连接真实数据库
+/*
+const createClient = (url, key) => {
+  console.log("Supabase Mock Init:", { url });
+  let mockDB = { Equipment: [], Reservations: [], AppUser: [], GlobalSettings: [] };
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+  const mockChain = (t) => ({
+      select: () => {
+        let d = [...(mockDB[t]||[])];
+        const b = {
+          order: (c) => { d.sort((x,y)=>x[c]>y[c]?-1:1); return b; },
+          eq: (f,v) => { d=d.filter(i=>i[f]===v); return b; },
+          neq: (f,v) => { d=d.filter(i=>i[f]!==v); return b; },
+          then: (cb) => delay(50).then(()=>cb({data:d,error:null}))
+        }; return b;
+      },
+      insert: (d) => ({ then: (cb) => { const n=(Array.isArray(d)?d:[d]).map(i=>({...i,id:Date.now()+Math.random(),created_at:new Date().toISOString()})); if(!mockDB[t])mockDB[t]=[]; mockDB[t].push(...n); delay(50).then(()=>cb({data:n,error:null})); } }),
+      update: (d) => ({ eq: (f,v) => ({ then: (cb) => { if(mockDB[t])mockDB[t]=mockDB[t].map(i=>i[f]===v?{...i,...d}:i); delay(50).then(()=>cb({data:null,error:null})); } }) }),
+      delete: () => ({ eq: (f,v) => ({ then: (cb) => { if(mockDB[t])mockDB[t]=mockDB[t].filter(i=>i[f]!==v); delay(50).then(()=>cb({data:null,error:null})); } }) })
+  });
+  return { from: mockChain, storage: { from: () => ({ upload: async () => ({data:{path:'x'}}), getPublicUrl: () => ({data:{publicUrl:'https://placehold.co/400x300?text=Equipment+Image'}}) }) } };
+};
+*/
+
+// 🔴 🔴 🔴 请务必替换为您在 Supabase Settings -> API 获取的真实数据 🔴 🔴 🔴
 const SUPABASE_URL = "https://rcmogvyepjhwexeojjuy.supabase.co"; 
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbW9ndnllcGpod2V4ZW9qanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwNzgwNjksImV4cCI6MjA4NDY1NDA2OX0.UIYJABF3-V3_po_xdfDhQK394_jEsxF6MPxBhsqLpZk";
 
@@ -108,7 +132,8 @@ export default function App() {
   const refreshData = async () => {
     setLoading(true);
     try {
-      const { data: rules } = await supabase.from('GlobalSettings').select('*');
+      const { data: rules, error: rErr } = await supabase.from('GlobalSettings').select('*');
+      if (rErr) throw rErr;
       if (rules && rules.length > 0) {
         const ruleObj = rules[0];
         setGlobalRules({ ...DEFAULT_RULES, ...ruleObj });
@@ -117,18 +142,28 @@ export default function App() {
       }
 
       if (userRole !== 'guest') {
-        const { data: eqs } = await supabase.from('Equipment').select('*').order('created_at', { ascending: false });
+        const { data: eqs, error: eErr } = await supabase.from('Equipment').select('*').order('created_at', { ascending: false });
+        if (eErr) throw eErr;
         if(eqs) setEquipmentList(eqs);
-        const { data: ress } = await supabase.from('Reservations').select('*').order('created_at', { ascending: false });
+
+        const { data: ress, error: rsErr } = await supabase.from('Reservations').select('*').order('created_at', { ascending: false });
+        if (rsErr) throw rsErr;
         if(ress) setReservations(ress);
+
         if (userRole === 'admin') {
-            const { data: users } = await supabase.from('AppUser').select('*').order('created_at', { ascending: false });
+            const { data: users, error: uErr } = await supabase.from('AppUser').select('*').order('created_at', { ascending: false });
+            if (uErr) throw uErr;
             if(users) setUserList(users);
         }
       }
     } catch (e) { 
       console.error(e);
-      showToast("数据加载异常，请检查网络或配置", "error"); 
+      // 如果未配置 Supabase，这里会报错
+      if(SUPABASE_URL.includes("YOUR_")) {
+          showToast("请配置 Supabase URL 和 Key", "error");
+      } else {
+          showToast("数据加载失败: " + e.message, "error"); 
+      }
     }
     setLoading(false);
   };
@@ -241,13 +276,24 @@ export default function App() {
           status: (userRole === 'admin' || !globalRules.needAudit) ? 'approved' : 'pending' 
       };
 
-      if (id) await supabase.from('Reservations').update(payload).eq('id', id);
-      else await supabase.from('Reservations').insert([payload]);
+      let error;
+      if (id) {
+          const res = await supabase.from('Reservations').update(payload).eq('id', id);
+          error = res.error;
+      } else {
+          const res = await supabase.from('Reservations').insert([payload]);
+          error = res.error;
+      }
+      
+      if(error) throw error;
       
       await refreshData();
       showToast(id ? "修改成功" : "预约成功");
       setModals(prev => ({ ...prev, booking: false }));
-    } catch (e) { showToast("操作失败", "error"); }
+    } catch (e) { 
+        console.error(e);
+        showToast("操作失败: " + e.message, "error"); 
+    }
     setLoading(false);
   };
 
@@ -258,8 +304,10 @@ export default function App() {
         setUserRole('admin');
         setCurrentUser({ username: '超级管理员', role: 'admin' });
     } else {
-        const { data } = await supabase.from('AppUser').select('*').eq('username', loginForm.username);
-        if (data?.[0] && data[0].password === loginForm.password) {
+        const { data, error } = await supabase.from('AppUser').select('*').eq('username', loginForm.username);
+        if (error) {
+            showToast("登录查询失败", "error");
+        } else if (data?.[0] && data[0].password === loginForm.password) {
             const u = data[0];
             setUserRole(u.role==='admin'?'admin':'student');
             setCurrentUser({ ...u, isBlocked: !!u.isBlocked });
