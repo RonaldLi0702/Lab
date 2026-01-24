@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+// 🟢 [正式部署]: 部署到 Vercel/GitHub 时，请务必取消下一行的注释！
+// import { createClient } from '@supabase/supabase-js';
 import { 
   Beaker, Clock, User, CheckCircle, XCircle, 
   Plus, Trash2, Search, Upload, Camera, Menu, X, Settings,
@@ -41,9 +42,17 @@ const formatDateTimeCN = (dateStr, timeStr) => {
   return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${timeStr}`;
 };
 
-// 百分比映射到时间 (分钟)
-const percentToTimeStr = (percent) => {
-  let totalMins = Math.floor((percent / 100) * 1440);
+// 0-24小时映射到像素位置
+const timeToPx = (timeStr) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (h === 24) return GRID_HEIGHT;
+  return (h * 60 + m) * (GRID_HEIGHT / 1440);
+};
+
+// 像素映射到时间 (分钟)
+const pxToTimeStr = (px) => {
+  let totalMins = Math.floor((px / GRID_HEIGHT) * 1440);
   totalMins = Math.max(0, Math.min(1440, totalMins)); 
   const remainder = totalMins % 15;
   if (remainder < 7.5) totalMins -= remainder; else totalMins += (15 - remainder);
@@ -118,8 +127,8 @@ export default function App() {
         }
       }
     } catch (e) { 
-        console.error(e);
-        showToast("数据加载异常，请检查Supabase连接配置", "error"); 
+      console.error(e);
+      showToast("数据加载异常，请检查网络或配置", "error"); 
     }
     setLoading(false);
   };
